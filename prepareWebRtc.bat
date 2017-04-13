@@ -376,9 +376,12 @@ POPD
 GOTO:EOF
 
 :updateSDKVersion
-
-FOR /f "tokens=4-7 delims=[.] " %%i IN ('ver') DO (IF %%i==Version (SET v=%%j.%%k.%%l) ELSE (SET v=%%i.%%j.%%k))
-
+systeminfo | findstr "Windows.Server.201[26]"
+IF ERRORLEVEL 1 (
+	FOR /f "tokens=4-7 delims=[.] " %%i IN ('ver') DO (IF %%i==Version (SET v=%%j.%%k.%%l) ELSE (SET v=%%i.%%j.%%k))
+) ELSE (
+	SET v="10.0.10240"
+)
 IF NOT "!v!"=="" (
 	CALL:print %warning% "!v! SDK version will be used"
 	SET SDKVersionString=%stringToUpdateWithSDKVersion:10.0.10240=!v!%
