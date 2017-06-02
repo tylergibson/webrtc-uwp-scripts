@@ -216,7 +216,7 @@ CALL:makeLink . buildtools ..\buildtools
 CALL:makeLink . build ..\chromium-pruned\build
 CALL:makeLink . chromium\src\third_party\jsoncpp ..\chromium-pruned\third_party\jsoncpp
 CALL:makeLink . chromium\src\third_party\jsoncpp\source ..\jsoncpp
-::CALL:makeLink . chromium\src\tools\protoc_wrapper ..\chromium-pruned\tools\protoc_wrapper
+CALL:makeLink . chromium\src\tools\protoc_wrapper ..\chromium-pruned\tools\protoc_wrapper
 CALL:makeLink . chromium\src\third_party\protobuf ..\chromium-pruned\third_party\protobuf
 CALL:makeLink . chromium\src\third_party\yasm ..\chromium-pruned\third_party\yasm
 CALL:makeLink . chromium\src\third_party\opus ..\chromium-pruned\third_party\opus
@@ -227,7 +227,7 @@ CALL:makeLink . chromium\src\third_party\libvpx ..\chromium-pruned\third_party\l
 CALL:makeLink . chromium\src\third_party\libvpx\source\libvpx ..\libvpx
 CALL:makeLink . chromium\src\testing ..\chromium-pruned\testing
 CALL:makeLink . testing chromium\src\testing
-::CALL:makeLink . tools\protoc_wrapper chromium\src\tools\protoc_wrapper
+CALL:makeLink . tools\protoc_wrapper chromium\src\tools\protoc_wrapper
 CALL:makeLink . third_party\yasm chromium\src\third_party\yasm
 CALL:makeLink . third_party\yasm\binaries ..\yasm\binaries
 CALL:makeLink . third_party\yasm\source\patched-yasm ..\yasm\patched-yasm
@@ -280,7 +280,7 @@ GOTO:EOF
 
 :generateProjectsForPlatform
 
-SET outputPath=out\%~1_%~2
+SET outputPath=out\%~1_%~2\%~3
 SET webRTCGnArgsDestinationPath=!outputPath!\args.gn
 CALL:makeDirectory !outputPath!
 CALL:copyTemplates %webRTCGnArgsTemplatePath% !webRTCGnArgsDestinationPath!
@@ -289,7 +289,20 @@ CALL:copyTemplates %webRTCGnArgsTemplatePath% !webRTCGnArgsDestinationPath!
 IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for platfrom %~1"
 
 %powershell_path% -ExecutionPolicy ByPass -File ..\..\..\bin\TextReplaceInFile.ps1 !webRTCGnArgsDestinationPath! "-target_cpu-" "%2" !webRTCGnArgsDestinationPath!
-IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for CPU %~1"
+IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for CPU %~2"
+
+SET debugArg=false
+SET releaseArg=true
+IF %~3==debug (
+	SET debugArg=true
+	SET releaseArg=false
+)
+
+%powershell_path% -ExecutionPolicy ByPass -File ..\..\..\bin\TextReplaceInFile.ps1 !webRTCGnArgsDestinationPath! "-is_debug-" !debugArg! !webRTCGnArgsDestinationPath!
+IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for debug %~3"
+
+%powershell_path% -ExecutionPolicy ByPass -File ..\..\..\bin\TextReplaceInFile.ps1 !webRTCGnArgsDestinationPath! "-is_official_build-" !releaseArg! !webRTCGnArgsDestinationPath!
+IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for debug %~4"
 
 IF %logLevel% GEQ %trace% (
 	CALL GN gen !outputPath! --ide="vs2015"
@@ -317,28 +330,34 @@ IF %platform_ARM% EQU 0 (
 IF %platform_x64% EQU 1 (
 	CALL:print %warning% "Generating WebRTC projects for x64 platform ..."
 	SET platform_x64_prepared=1
-	CALL:generateProjectsForPlatform winrt_10 x64
+	CALL:generateProjectsForPlatform winrt_10 x64 debug
+	CALL:generateProjectsForPlatform winrt_10 x64 release
 	SET platform_x64_prepared=2
 )
 
 IF %platform_x86% EQU 1 (
 	CALL:print %warning% "Generating WebRTC projects for x86 platform ..."
 	SET platform_x86_prepared=1
-	CALL:generateProjectsForPlatform winrt_10 x86
+	CALL:generateProjectsForPlatform winrt_10 x86 debug
+	CALL:generateProjectsForPlatform winrt_10 x86 release
 	SET platform_x86_prepared=2
 )
 
 IF %platform_win32% EQU 1 (
 	CALL:print %warning% "Generating WebRTC projects for win32 platform ..."
 	SET platform_win32_prepared=1
-	CALL:generateProjectsForPlatform win x86
+	CALL:generateProjectsForPlatform win x86 debug
+	CALL:generateProjectsForPlatform win x86 release
 	SET platform_win32_prepared=2
 )
 
 IF %platform_win32_x64% EQU 1 (
 	CALL:print %warning% "Generating WebRTC projects for win32 x64 platform ..."
 	SET platform_win32_prepared=1
-	CALL:generateProjectsForPlatform win x64
+	CALL:generateProjectsForPlatform win x64 debug
+	CALL:generateProjectsForPlatform win x64 release
+	CALL:generateProjectsForPlatform win x86 debug
+	CALL:generateProjectsForPlatform win x86 release
 	SET platform_win32_prepared=2
 )
 

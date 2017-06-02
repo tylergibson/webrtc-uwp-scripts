@@ -8,7 +8,7 @@
 @ECHO off
 SETLOCAL EnableDelayedExpansion
 
-SET SOLUTIONPATH=%1
+SET OUTPATH=%1
 SET CONFIGURATION=%2
 SET PLATFORM=%3
 SET SOFTWARE_PLATFORM=%4
@@ -122,12 +122,15 @@ IF EXIST %msVS_Path% (
 ::IF /I "%currentPlatform%"=="win32" (
 	IF NOT "%currentPlatform%"=="%currentPlatform:win32=%" (
 		IF NOT "%currentPlatform%"=="%currentPlatform:x64=%" (
-			MSBuild %SOLUTIONPATH% /property:Configuration=%CONFIGURATION% /property:Platform=x64 /t:Clean;Build /nodeReuse:False
+			::MSBuild %OUTPATH% /property:Configuration=%CONFIGURATION% /property:Platform=x64 /t:Clean;Build /nodeReuse:False
+			ninja -C %OUTPATH%/win_x64/%CONFIGURATION%
 		) ELSE (
-			MSBuild %SOLUTIONPATH% /property:Configuration=%CONFIGURATION% /property:Platform=win32 /t:Clean;Build /nodeReuse:False
+			::MSBuild %OUTPATH% /property:Configuration=%CONFIGURATION% /property:Platform=win32 /t:Clean;Build /nodeReuse:False
+			ninja -C %OUTPATH%/win_x86/%CONFIGURATION%
 		)
 	) ELSE (
-		MSBuild %SOLUTIONPATH% /property:Configuration=%CONFIGURATION% /property:Platform=%PLATFORM% /t:Clean;Build /nodeReuse:False /m
+		::MSBuild %OUTPATH% /property:Configuration=%CONFIGURATION% /property:Platform=%PLATFORM% /t:Clean;Build /nodeReuse:False /m
+		ninja -C %OUTPATH%/winrt_10_%PLATFORM%/%CONFIGURATION%
 	)
 	IF ERRORLEVEL 1 CALL:error 1 "Building WebRTC projects for %PLATFORM% has failed"
 ) ELSE (
@@ -136,7 +139,7 @@ IF EXIST %msVS_Path% (
 GOTO:EOF
 
 :combineLibs
-CALL:setPaths %SOLUTIONPATH%
+CALL:setPaths %OUTPATH%
 
 IF NOT EXIST %destinationPath% (
 	CALL:makeDirectory %destinationPath%
@@ -189,29 +192,29 @@ GOTO:EOF
 SET basePath=%~dp1
 
 IF /I "%currentPlatform%"=="x64" (
-	SET libsSourcePath=%basePath%build_win10_x64\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_x64\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%winrt_x64\%CONFIGURATION%
+	SET libsSourcePathDestianation=%basePath%winrt_10_x64\%SOFTWARE_PLATFORM%\
 )
 
 IF /I "%currentPlatform%"=="x86" (
-	SET libsSourcePath=%basePath%build_win10_x86\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_x86\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%winrt_x86\%CONFIGURATION%
+	SET libsSourcePathDestianation=%basePath%winrt_10_x86\%SOFTWARE_PLATFORM%\
 )
 
 IF /I "%currentPlatform%"=="ARM" (
-	SET libsSourcePath=%basePath%build_win10_arm\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_arm\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%winrt_arm\%CONFIGURATION%
+	SET libsSourcePathDestianation=%basePath%winrt_arm\%SOFTWARE_PLATFORM%\
 )
 
 
 IF /I "%currentPlatform%"=="win32" (
-	SET libsSourcePath=%basePath%build_win32\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win32\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%win_x86\%CONFIGURATION%
+	SET libsSourcePathDestianation=%basePath%win_x86\%SOFTWARE_PLATFORM%\
 )
 
 IF /I "%currentPlatform%"=="win32_x64" (
-	SET libsSourcePath=%basePath%build_win32\%CONFIGURATION%_x64
-	SET libsSourcePathDestianation=%basePath%build_win32\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%win_x64\%CONFIGURATION%_x64
+	SET libsSourcePathDestianation=%basePath%win_x64\%SOFTWARE_PLATFORM%\
 )
 
 ::IF NOT "%currentPlatform%"=="%currentPlatform:win32=%" (
