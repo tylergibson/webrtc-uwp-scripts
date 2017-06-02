@@ -375,32 +375,50 @@ POPD
 
 GOTO:EOF
 
-:makeFileLink
-IF NOT EXIST %~1 CALL:error 1 "%folderStructureError:"=% %~1 does not exist!"
+:determineWindowsSDK
+SET windowsSDKPath="Program Files (x86)\Windows Kits\10\Lib\"
+SET windowsSDKFullPath=C:\!windowsSDKPath!
 
-echo %cd%
-PUSHD %~1
-IF EXIST .\%~2 GOTO:alreadyexists
-IF NOT EXIST %~3 CALL:error 1 "%folderStructureError:"=% %~3 does not exist!"
-
-IF %logLevel% GEQ %trace% (
-	MKLINK /J %~2 %~3
-) ELSE (
-	MKLINK /J %~2 %~3  >NUL
+IF DEFINED USE_WIN_SDK_FULL_PATH SET windowsSDKFullPath=!USE_WIN_SDK_FULL_PATH! && GOTO parseSDKPath
+IF DEFINED USE_WIN_SDK SET windowsSDKVersion=!USE_WIN_SDK! && GOTO setVersion
+FOR %%p IN (A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO (
+	IF EXIST %%p:\!windowsSDKPath! (
+		SET windowsSDKFullPath=%%p:\!windowsSDKPath!
+		GOTO determineVersion
+	)
 )
 
-CALL:print %trace% In path "%~1" creating symbolic link for "%~2" to "%~3"
+:parseSDKPath
+IF EXIST !windowsSDKFullPath! (
+	FOR %%A IN ("!windowsSDKFullPath!") DO (
+		SET windowsSDKVersion=%%~nxA
+	)
+) ELSE (
+	CALL:ERROR 1 "Invalid Windows SDK path"
+)
+GOTO setVersion
 
-IF %ERRORLEVEL% NEQ 0 CALL:ERROR 1 "COULD NOT CREATE SYMBOLIC LINK TO %~2 FROM %~3"
+:determineVersion
+IF EXIST !windowsSDKFullPath! (
+	PUSHD !windowsSDKFullPath!
+	FOR /F "delims=" %%a in ('dir /ad /b /on') do (
+		IF NOT %%a==10.0.15063.0 SET windowsSDKVersion=%%a
+	)
+	POPD
+) ELSE (
+	CALL:ERROR 1 "Invalid Windows SDK path"
+)
 
-:alreadyexists
-POPD
-
+:setVersion
+IF NOT "!windowsSDKVersion!"=="" (
+	FOR /f "tokens=1-3 delims=[.] " %%i IN ("!windowsSDKVersion!") DO (SET v=%%i.%%j.%%k)
+) ELSE (
+	CALL:ERROR 1 "Supported Windows SDK is not present. Latest supported Win SDK is 10.0.14393.0"
+)
 GOTO:EOF
-
 :updateSDKVersion
 
-FOR /f "tokens=4-7 delims=[.] " %%i IN ('ver') DO (IF %%i==Version (SET v=%%j.%%k.%%l) ELSE (SET v=%%i.%%j.%%k))
+CALL:determineWindowsSDK
 
 IF NOT "!v!"=="" (
 	CALL:print %warning% "!v! SDK version will be used"
@@ -408,7 +426,6 @@ IF NOT "!v!"=="" (
 	%powershell_path% -ExecutionPolicy ByPass -File bin\TextReplaceInFile.ps1 %pythonFilePathToUpdateSDKVersion% "%stringToUpdateWithSDKVersion%" "!SDKVersionString!" %pythonFilePathToUpdateSDKVersion%
 	IF ERRORLEVEL 1 CALL:error 0 "Failed to set newer SDK version"
 )
-
 GOTO:EOF
 
 :resetSDKVersion
