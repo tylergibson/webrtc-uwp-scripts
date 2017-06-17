@@ -45,8 +45,7 @@ SET errorMessageInvalidPlatform="Invalid platform name. For the list of availabl
 
 ::path constants
 SET baseWebRTCPath=webrtc\xplatform\webrtc
-SET webRtcx64TemplatePath=webrtc\windows\templates\libs\webrtc\WebRtc.x64.sln
-SET webRtcx86TemplatePath=webrtc\windows\templates\libs\webrtc\WebRtc.x86.sln
+SET webRtcSolutionTemplatePath=webrtc\windows\templates\libs\webrtc
 SET webRTCDestinationPath=webrtc\xplatform\webrtc\webrtcLib.sln
 
 SET webRTCGnArgsTemplatePath=..\..\..\webrtc\windows\templates\gns\args.gn
@@ -217,7 +216,7 @@ CALL:makeLink . buildtools ..\buildtools
 CALL:makeLink . build ..\chromium-pruned\build
 CALL:makeLink . chromium\src\third_party\jsoncpp ..\chromium-pruned\third_party\jsoncpp
 CALL:makeLink . chromium\src\third_party\jsoncpp\source ..\jsoncpp
-::CALL:makeLink . chromium\src\tools\protoc_wrapper ..\chromium-pruned\tools\protoc_wrapper
+CALL:makeLink . chromium\src\tools\protoc_wrapper ..\chromium-pruned\tools\protoc_wrapper
 CALL:makeLink . chromium\src\third_party\protobuf ..\chromium-pruned\third_party\protobuf
 CALL:makeLink . chromium\src\third_party\yasm ..\chromium-pruned\third_party\yasm
 CALL:makeLink . chromium\src\third_party\opus ..\chromium-pruned\third_party\opus
@@ -228,7 +227,7 @@ CALL:makeLink . chromium\src\third_party\libvpx ..\chromium-pruned\third_party\l
 CALL:makeLink . chromium\src\third_party\libvpx\source\libvpx ..\libvpx
 CALL:makeLink . chromium\src\testing ..\chromium-pruned\testing
 CALL:makeLink . testing chromium\src\testing
-::CALL:makeLink . tools\protoc_wrapper chromium\src\tools\protoc_wrapper
+CALL:makeLink . tools\protoc_wrapper chromium\src\tools\protoc_wrapper
 CALL:makeLink . third_party\yasm chromium\src\third_party\yasm
 CALL:makeLink . third_party\yasm\binaries ..\yasm\binaries
 CALL:makeLink . third_party\yasm\source\patched-yasm ..\yasm\patched-yasm
@@ -272,34 +271,29 @@ GOTO:EOF
 
 :downloadGnBinaries
 
-IF NOT EXIST gn.exe CALL python c:\depot_tools\download_from_google_storage.py -b chromium-gn -s buildtools\win\gn.exe.sha1
+IF NOT EXIST gn.exe CALL python ..\depot_tools\download_from_google_storage.py -b chromium-gn -s buildtools\win\gn.exe.sha1
 IF !errorlevel! NEQ 0 CALL:error 1 "Failed downloading gn.exe"
 
-IF NOT EXIST clang-format.exe CALL python c:\depot_tools\download_from_google_storage.py -b chromium-clang-format -s buildtools\win\clang-format.exe.sha1
+IF NOT EXIST clang-format.exe CALL python ..\depot_tools\download_from_google_storage.py -b chromium-clang-format -s buildtools\win\clang-format.exe.sha1
 IF !errorlevel! NEQ 0 CALL:error 1 "Failed downloading clang-format.exe"
 GOTO:EOF
 
 :generateProjectsForPlatform
 
-SET outputPath=out\%~1_%~2
-SET webRTCGnArgsDestinationPath=!outputPath!\args.gn
-CALL:makeDirectory !outputPath!
-CALL:copyTemplates %webRTCGnArgsTemplatePath% !webRTCGnArgsDestinationPath!
-
-%powershell_path% -ExecutionPolicy ByPass -File ..\..\..\bin\TextReplaceInFile.ps1 !webRTCGnArgsDestinationPath! "-target_os-" "%~1" !webRTCGnArgsDestinationPath!
-IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for platfrom %~1"
-
-%powershell_path% -ExecutionPolicy ByPass -File ..\..\..\bin\TextReplaceInFile.ps1 !webRTCGnArgsDestinationPath! "-target_cpu-" "%2" !webRTCGnArgsDestinationPath!
-IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for CPU %~2"
+SET releaseArgs="target_os=\"%~1\" target_cpu=\"%~2\" is_debug=false libyuv_include_tests=false build_libsrtp_tests=false rtc_include_tests=false"
+SET debugArgs="target_os=\"%~1\" target_cpu=\"%~2\" is_debug=true libyuv_include_tests=false build_libsrtp_tests=false rtc_include_tests=false"
+CALL:makeDirectory !outputPath!\release
+CALL:makeDirectory !outputPath!\debug
 
 IF %logLevel% GEQ %trace% (
-	CALL GN gen !outputPath! --ide="vs2015"
+	CALL buildtools\win\gn.exe gen !outputPath!\release --ide="vs2015" --args=!releaseArgs!
+	CALL buildtools\win\gn.exe gen !outputPath!\debug --ide="vs2015" --args=!debugArgs!
 ) ELSE (
-	CALL GN gen !outputPath! --ide="vs2015" >NUL
+	CALL buildtools\win\gn.exe gen !outputPath!\release --ide="vs2015" --args=!releaseArgs! >NUL
+	CALL buildtools\win\gn.exe gen !outputPath!\debug --ide="vs2015" --args=!debugArgs! >NUL
 )
 IF !errorlevel! NEQ 0 CALL:error 1 "Could not generate WebRTC projects for %1 platform, %2 CPU"
 
-IF EXIST %baseWebRTCPath%\WebRtc.%~2.sln CALL:copyTemplates  %baseWebRTCPath%WebRtc.%~2.sln !outputPath!
 GOTO:EOF
 
 
@@ -399,9 +393,50 @@ POPD
 
 GOTO:EOF
 
+:determineWindowsSDK
+SET windowsSDKPath="Program Files (x86)\Windows Kits\10\Lib\"
+SET windowsSDKFullPath=C:\!windowsSDKPath!
+IF DEFINED USE_WIN_SDK_FULL_PATH SET windowsSDKFullPath=!USE_WIN_SDK_FULL_PATH! && GOTO parseSDKPath
+IF DEFINED USE_WIN_SDK SET windowsSDKVersion=!USE_WIN_SDK! && GOTO setVersion
+FOR %%p IN (A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) DO (
+	IF EXIST %%p:\!windowsSDKPath! (
+		SET windowsSDKFullPath=%%p:\!windowsSDKPath!
+		GOTO determineVersion
+	)
+)
+
+:parseSDKPath
+IF EXIST !windowsSDKFullPath! (
+	FOR %%A IN ("!windowsSDKFullPath!") DO (
+		SET windowsSDKVersion=%%~nxA
+	)
+) ELSE (
+	CALL:ERROR 1 "Invalid Windows SDK path"
+)
+GOTO setVersion
+
+:determineVersion
+IF EXIST !windowsSDKFullPath! (
+	PUSHD !windowsSDKFullPath!
+	FOR /F "delims=" %%a in ('dir /ad /b /on') do (
+		IF NOT %%a==10.0.15063.0 SET windowsSDKVersion=%%a
+	)
+	POPD
+) ELSE (
+	CALL:ERROR 1 "Invalid Windows SDK path"
+)
+
+:setVersion
+IF NOT "!windowsSDKVersion!"=="" (
+	FOR /f "tokens=1-3 delims=[.] " %%i IN ("!windowsSDKVersion!") DO (SET v=%%i.%%j.%%k)
+) ELSE (
+	CALL:ERROR 1 "Supported Windows SDK is not present. Latest supported Win SDK is 10.0.14393.0"
+)
+GOTO:EOF
+
 :updateSDKVersion
 
-FOR /f "tokens=4-7 delims=[.] " %%i IN ('ver') DO (IF %%i==Version (SET v=%%j.%%k.%%l) ELSE (SET v=%%i.%%j.%%k))
+CALL:determineWindowsSDK
 
 IF NOT "!v!"=="" (
 	CALL:print %warning% "!v! SDK version will be used"
@@ -471,7 +506,7 @@ REM Copy all ORTC template required to set developer environment
 :copyTemplates
 
 IF NOT EXIST %~1 CALL:error 1 "%folderStructureError:"=% %~1 does not exist!"
-
+ECHO "Copy template %~1 %~2"
 COPY %~1 %~2 >NUL
 
 CALL:print %trace% Copied file %~1 to %~2
@@ -485,11 +520,11 @@ SET logType=%1
 SET logMessage=%~2
 
 if %logLevel% GEQ  %logType% (
-	if %logType%==0 ECHO [91m%logMessage%[0m
-	if %logType%==1 ECHO [92m%logMessage%[0m
-	if %logType%==2 ECHO [93m%logMessage%[0m
-	if %logType%==3 ECHO [95m%logMessage%[0m
-	if %logType%==4 ECHO %logMessage%
+	if %logType%==0 ECHO [91m!logMessage!%[0m
+	if %logType%==1 ECHO [92m!logMessage![0m
+	if %logType%==2 ECHO [93m!logMessage![0m
+	if %logType%==3 ECHO [95m!logMessage![0m
+	if %logType%==4 ECHO !logMessage!
 )
 
 GOTO:EOF

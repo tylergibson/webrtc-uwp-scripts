@@ -8,7 +8,7 @@
 @ECHO off
 SETLOCAL EnableDelayedExpansion
 
-SET SOLUTIONPATH=%1
+SET GNOUTPUTPATH=%1
 SET CONFIGURATION=%2
 SET PLATFORM=%3
 SET SOFTWARE_PLATFORM=%4
@@ -49,9 +49,7 @@ CALL:setCompilerOption %currentPlatform%
 
 CALL:build
 
-CALL:combineLibs
-
-CALL:moveLibs
+CALL:moveOutput
 
 GOTO:done
 
@@ -78,7 +76,7 @@ GOTO:EOF
 CALL:print %trace% "Determining compiler options ..."
 REG Query "HKLM\Hardware\Description\System\CentralProcessor\0" | FIND /i "x86" > NUL && SET CPU=x86 || SET CPU=x64
 
-CALL:print %trace% "CPU arhitecture is %CPU%"
+CALL:print %trace% "CPU architecture is %CPU%"
 
 IF /I %CPU% == x86 (
 	SET x86BuildCompilerOption=x86
@@ -119,96 +117,68 @@ IF EXIST %msVS_Path% (
 	CALL %msVS_Path%\VC\vcvarsall.bat %currentBuildCompilerOption%
 	IF ERRORLEVEL 1 CALL:error 1 "Could not setup compiler for  %PLATFORM%"
 	
-	MSBuild %SOLUTIONPATH% /property:Configuration=%CONFIGURATION% /property:Platform=%PLATFORM% /t:Clean;Build /nodeReuse:False
+	REM MSBuild %GNOUTPUTPATH% /property:Configuration=%CONFIGURATION% /property:Platform=%PLATFORM% /t:Clean;Build /nodeReuse:False
+	REM CALL ninja.exe -C %GNOUTPUTPATH%\winrt_10_%PLATFORM%\%CONFIGURATION% -tclean
+	CALL ninja.exe -C %GNOUTPUTPATH%\winrt_10_%PLATFORM%\%CONFIGURATION%
 	IF ERRORLEVEL 1 CALL:error 1 "Building WebRTC projects for %PLATFORM% has failed"
 ) ELSE (
 	CALL:error 1 "Could not compile because proper version of Visual Studio is not found"
 )
 GOTO:EOF
 
-:combineLibs
-CALL:setPaths %SOLUTIONPATH%
+:moveOutput
+CALL:setPaths %GNOUTPUTPATH%
 
-IF NOT EXIST %destinationPath% (
+IF NOT EXIST "%destinationPath%" (
 	CALL:makeDirectory %destinationPath%
 	IF ERRORLEVEL 1 CALL:error 1 "Could not make a directory %destinationPath%libs"
 )
-
 SET webRtcLibs=
 
-FOR /f %%A IN ('forfiles -p %libsSourcePath% /s /m *.lib /c "CMD /c ECHO @relpath"') DO ( SET temp=%%~A && IF "!temp!"=="!temp:protobuf_full_do_not_use=!" SET webRtcLibs=!webRtcLibs! %%~A )
+MOVE /Y %libsSourcePath%obj\webrtc\webrtc.lib %destinationPath%webrtclib_original.lib
 
-PUSHD %libsSourcePath%
+FOR /f %%A IN ('forfiles -p %libsSourcePath%obj /s /m *.lib /c "CMD /c ECHO @relpath"') DO ( SET temp=%%~A && IF "!temp!"=="!temp:protobuf_full=!"  SET webRtcLibs=!webRtcLibs! %%~A )
+
+PUSHD %libsSourcePath%obj
+
 IF NOT "!webRtcLibs!"=="" %msVS_Path%\VC\Bin\lib.exe /OUT:%destinationPath%webrtc.lib !webRtcLibs!
 IF ERRORLEVEL 1 CALL:error 1 "Failed combining libs"
 
+
+
 IF EXIST *.dll (
-	CALL:print %debug% "Moving dlls from %libsSourcePath% to %destinationPath%"
-	FOR /f %%A IN ('forfiles -p %libsSourcePath% /s /m *.dll /c "CMD /c ECHO @relpath"') DO ( COPY %%~A %destinationPath% >NUL )
+	CALL:print %debug% "Copying dlls from %libsSourcePath% to %destinationPath%"
+	FOR /f %%A IN ('forfiles -p %libsSourcePath% /s /m *.dll /c "CMD /c ECHO @relpath"') DO ( COPY /Y %%~A %destinationPath% >NUL )
 )
 
-CALL:print %debug% "Moving pdbs from %libsSourcePath% to %destinationPath%"
+CALL:print %debug% "Copying pdbs from %libsSourcePath% to %destinationPath%"
 
-FOR /f %%A IN ('forfiles -p %libsSourcePath% /s /m *.pdb /c "CMD /c ECHO @relpath"') DO ( SET temp=%%~A && IF "!temp!"=="!temp:protobuf_full_do_not_use=!" MOVE %%~A %destinationPath% >NUL )
-
+FOR /f %%A IN ('forfiles -p %libsSourcePath% /s /m *.pdb /c "CMD /c ECHO @relpath"') DO ( SET temp=%%~A && IF "!temp!"=="!temp:protobuf_full=!" COPY /Y %%~A %destinationPath% >NUL )
 
 IF ERRORLEVEL 1 CALL:error 0 "Failed moving pdb files"
 POPD
 GOTO:EOF
 
-:appendLibPath
-if "%~1"=="%~1:protobuf_lite.dll=%" SET webRtcLibs=!webRtcLibs! %~1
-GOTO:EOF
-
-:moveLibs
-
-IF NOT EXIST %libsSourcePathDestianation%NUL (
-	CALL:makeDirectory %libsSourcePathDestianation%
-	CALL:print %trace% "Created folder %libsSourcePathDestianation%"
-) ELSE (
-	IF EXIST %libsSourcePathDestianation%%CONFIGURATION%\NUL RD /S /Q %libsSourcePathDestianation%%CONFIGURATION%
-)
-
-
-CALL:print %debug% "Moving %libsSourcePath% to %libsSourcePathDestianation%"
-MOVE %libsSourcePath% %libsSourcePathDestianation%
-if ERRORLEVEL 1 CALL:error 0 "Failed moving %libsSourcePath% to %libsSourcePathDestianation%"
+CALL:print %debug% "Moving %libsSourcePath% to %libsSourcePathDestination%"
+MOVE %libsSourcePath% %libsSourcePathDestination%
+if ERRORLEVEL 1 CALL:error 0 "Failed moving %libsSourcePath% to %libsSourcePathDestination%"
 
 GOTO:EOF
 
 :setPaths
 SET basePath=%~dp1
 
-IF /I "%currentPlatform%"=="x64" (
-	SET libsSourcePath=%basePath%build_win10_x64\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_x64\%SOFTWARE_PLATFORM%\
-)
-
-IF /I "%currentPlatform%"=="x86" (
-	SET libsSourcePath=%basePath%build_win10_x86\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_x86\%SOFTWARE_PLATFORM%\
-)
-
-IF /I "%currentPlatform%"=="ARM" (
-	SET libsSourcePath=%basePath%build_win10_arm\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win10_arm\%SOFTWARE_PLATFORM%\
-)
-
-
 IF /I "%currentPlatform%"=="win32" (
-	SET libsSourcePath=%basePath%build_win32\%CONFIGURATION%
-	SET libsSourcePathDestianation=%basePath%build_win32\%SOFTWARE_PLATFORM%\
-)
-
-IF /I "%currentPlatform%"=="win32_x64" (
-	SET libsSourcePath=%basePath%build_win32\%CONFIGURATION%_x64
-	SET libsSourcePathDestianation=%basePath%build_win32\%SOFTWARE_PLATFORM%\
+	SET libsSourcePath=%basePath%out\win_%currentPlatform%\%CONFIGURATION%\
+	SET libsSourcePathDestination=%basePath%dist\win_%currentPlatform%\%CONFIGURATION%\
+) ELSE (
+	SET libsSourcePath=%basePath%out\winrt_10_%currentPlatform%\%CONFIGURATION%\
+	SET libsSourcePathDestination=%basePath%dist\winrt_10_%currentPlatform%\%CONFIGURATION%\
 )
 
 CALL:print %debug% "Source path is %libsSourcePath%"
 
-::SET destinationPath=%basePath%WEBRTC_BUILD\%SOFTWARE_PLATFORM%\%CONFIGURATION%\%currentPlatform%\
-SET destinationPath=%libsSourcePath%\..\..\WEBRTC_BUILD\%SOFTWARE_PLATFORM%\%CONFIGURATION%\%currentPlatform%\
+SET destinationPath=%libsSourcePathDestination%
 
 CALL:print %debug% "Destination path is %destinationPath%"
 GOTO :EOF
