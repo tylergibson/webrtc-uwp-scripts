@@ -146,11 +146,11 @@ CALL:perlCheck
 ::Check if python is installed. If it isn't install it and add in the path
 CALL:pythonSetup
 
-::Generate WebRTC VS2015 projects from gyp files
-CALL:prepareWebRTC
-
 ::Install ninja if missing
-IF %platform_win32% EQU 1 CALL:installNinja
+::CALL:installNinja
+
+::Generate WebRTC VS2015 projects from gn files
+CALL:prepareWebRTC
 
 IF %prepare_ORTC_Environemnt% EQU 1 (
 	::Prepare ORTC development environment
@@ -575,7 +575,7 @@ IF !ERRORLEVEL! EQU 1 (
 			CALL::print %trace% "Unarchiving ninja-win.zip ..."
 			CALL:unzipfile "%~dp0" "%~dp0ninja-win.zip" 
 		) ELSE (
-			CALL:error 0 "Ninja is not installed. Win32 projects cwon't be buildable."
+			CALL:error 0 "Ninja is not installed. Projects won't be buildable."
 		)
 	)
 	
