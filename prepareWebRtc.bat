@@ -45,7 +45,7 @@ SET errorMessageInvalidPlatform="Invalid platform name. For the list of availabl
 
 ::path constants
 SET baseWebRTCPath=webrtc\xplatform\webrtc
-SET webRtcSolutionTemplatePath=webrtc\windows\templates\libs\webrtc
+SET webRtcLibsTemplatePath=webrtc\windows\templates\libs\webrtc
 SET webRtcx64TemplatePath=webrtc\windows\templates\libs\webrtc\WebRtc.x64.sln
 SET webRtcx86TemplatePath=webrtc\windows\templates\libs\webrtc\WebRtc.x86.sln
 SET webRTCDestinationPath=webrtc\xplatform\webrtc\webrtcLib.sln
@@ -327,9 +327,9 @@ IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for CPU %~2"
 IF ERRORLEVEL 1 CALL:error 1 "Failed updating gn arguments for debug/release %IsDebugTarget%"
 
 IF %logLevel% GEQ %trace% (
-	CALL GN gen !outputPath! --ide="vs2015"
+	CALL buildtools\win\gn.exe gen !outputPath! --ide="vs2015"
 ) ELSE (
-	CALL GN gen !outputPath! --ide="vs2015" >NUL
+	CALL buildtools\win\gn.exe gen !outputPath! --ide="vs2015" >NUL
 )
 IF !errorlevel! NEQ 0 CALL:error 1 "Could not generate WebRTC projects for %1 platform, %2 CPU"
 
